@@ -1,0 +1,4 @@
+#!/usr/bin/env ruby
+
+require 'gis_convenience_functions'
+puts GisConvenienceFunctions.hi(ARGV[0])

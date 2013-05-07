@@ -1,4 +1,4 @@
-class Hola::Translator
+class GisConvenienceFunctions::Osm
   def initialize(language = "english")
     @language = language
   end
