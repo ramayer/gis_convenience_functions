@@ -1,4 +1,49 @@
 #!/usr/bin/env ruby
+$: << './lib'
 
 require 'gis_convenience_functions'
-puts GisConvenienceFunctions.hi(ARGV[0])
+require 'yaml'
+
+if ARGV.length != 2
+  $stderr.puts %Q{usage:
+     env GIS_HOST=gis.example.com GIS_PORT=5432 GIS_PASSWORD='password' bin/gis_convenience_functions 37.798757145894 -122.26331616967 
+  }
+  exit
+end
+
+gcf = GisConvenienceFunctions.new(ENV['GIS_USER'] || 'gis',
+                                  ENV['GIS_DATABASE'] || 'gis',
+                                  ENV['GIS_HOST'] || 'gis_db',
+                                  ENV['GIS_PORT'] || '5432',
+                                  ENV['GIS_PASSWORD'])
+
+lat = ARGV[0]
+lon = ARGV[1]
+
+puts gcf.guess_city(lat,lon).inspect
+
+
+puts gcf.get_blockgroups(lat,lon).inspect
+
+state,county,city,inside,uniq_near,english = gcf.nearby_landmarks(lat,lon)
+
+    puts [state,county,city].reverse.join(", ")
+    puts "in: #{inside.join(", ")}"
+    puts "near: #{uniq_near.join(", ")}"
+    puts english
+
+exit
+
+
+puts '====================================================='
+puts(gcf.nearby_polygons(lat,lon).to_yaml)
+
+puts '====================================================='
+puts(gcf.nearby_lines(lat,lon).map{|x| x['name']}.uniq.to_yaml)
+
+puts '====================================================='
+puts(gcf.nearby_points(lat,lon).to_yaml)
+
+puts '====================================================='
+puts(gcf.cheap_reverse_geocode(lat,lon))
+
