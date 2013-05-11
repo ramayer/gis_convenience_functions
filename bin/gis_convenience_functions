@@ -20,17 +20,24 @@ gcf = GisConvenienceFunctions.new(ENV['GIS_USER'] || 'gis',
 lat = ARGV[0]
 lon = ARGV[1]
 
-puts gcf.guess_city(lat,lon).inspect
+puts "========= nearby landmarks =============="
+
+nearby_landmarks = gcf.nearby_landmarks(lat,lon)
+
+puts nearby_landmarks.to_yaml
 
 
+puts "========= census edges =============="
+puts gcf.closest_census_edges(lat,lon).inspect
+
+
+puts "========= guess city =============="
+puts gcf.guess_city_from_census_data(lat,lon).inspect
+
+puts "========= get blockgroup =============="
 puts gcf.get_blockgroups(lat,lon).inspect
 
-state,county,city,inside,uniq_near,english = gcf.nearby_landmarks(lat,lon)
 
-    puts [state,county,city].reverse.join(", ")
-    puts "in: #{inside.join(", ")}"
-    puts "near: #{uniq_near.join(", ")}"
-    puts english
 
 exit
 
