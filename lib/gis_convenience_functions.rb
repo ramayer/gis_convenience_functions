@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 require 'pg' 
+
+# consider
+#   http://dazzlepod.com/ip/206.205.67.67.json
+# for reverse IP lookups?
+
 class GisConvenienceFunctions
 
   def initialize(dbname,user,host,port,password)
@@ -43,13 +48,13 @@ class GisConvenienceFunctions
                ST_Distance(ST_Transform(geom,900913),ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),900913)) as dist
                FROM census_tl_2012_edges
                JOIN census_ansi_state on (statefp = state_ansi)
-               WHERE fullname is not null
+               WHERE fullname is not null or zipl is not null or zipr is not null
                AND geom && ST_Transform(ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),900913),#{interesting_distance}),4269)
                ORDER BY geom<->ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),4269) limit 100
        ) as a
       where
          true
-      order by dist limit 5;
+      order by dist limit 10;
     }
     result = @geo_pg.exec(sql,[lat,lon])
     result.to_a.map{|row| row.each_pair{|x,y| row.delete(x) unless y}; row.delete('geom'); row}
@@ -69,6 +74,29 @@ class GisConvenienceFunctions
     }
     result = @geo_pg.exec(sql,[lat,lon])
     result.to_a.map{|row| row.each_pair{|x,y| row.delete(x) unless y}; row.delete('way'); row}.first
+  end
+
+  def polygons_to_kml()
+    sql = %Q{
+        SELECT askml(way),*
+          FROM planet_osm_polygon
+          WHERE name is not null
+          AND way && (select buffer(way,1000) from planet_osm_polygon where name = 'Alameda County')
+          AND admin_level is not null
+         LIMIT 1000
+    }
+
+    sql = %Q{
+       SELECT namelsad10 as name, askml(geom), geom as way, *
+         FROM census_tl_2010_place
+         JOIN census_ansi_state on (statefp10 = state_ansi)
+        WHERE statefp10 = '06'
+          AND geom && (select st_transform(buffer(way,100000),4269) from planet_osm_polygon where name = 'Alameda County')
+        LIMIT 1000
+    }
+
+    result = @geo_pg.exec(sql,[])
+    result.to_a.map{|row| row}
   end
 
   def nearby_polygons(lat,lon,interesting_distance = nil)
@@ -182,14 +210,21 @@ class GisConvenienceFunctions
     }
 
     ne = closest_census_edges(lat,lon)
-    if ne.first 
-      inside << ne.first['zipl']
-      inside << ne.first['zipr']
-      zip = ne.first['zipl'] || ne.first['zipr']
+
+    ### These edges are mostly redundant with OSM
+    ### OSM is more complete (international), but
+    ### Census has nicer looking names (Rd instead of Road, etc)
+    #
+    # ne.each{|p|
+    #   near << [p['fullname'],p['dist'].to_f] if p['fullname']
+    # }
+
+    nez = ne.select{|x| x['zipl'] || x['zipr']}.first 
+    if nez
+      inside << nez['zipl'] if nez['zipl'] 
+      inside << nez['zipr'] if nez['zipr'] 
+      zip = nez['zipl'] || nez['zipr']
     end
-    ne.each{|p|
-      near << [p['fullname'],p['dist'].to_f]
-    }
 
     nl = nearby_osm_lines(lat,lon)
     nl.each{|p|
@@ -198,7 +233,6 @@ class GisConvenienceFunctions
 
     nl = nearby_osm_points(lat,lon)
     nl.each{|p|
-      puts p.inspect
       near   << ["a bank"            , p['dist'].to_f] if p['amenity'] == 'bank'
       near   << ["a school"          , p['dist'].to_f] if p['amenity'] == 'school'
       near   << ["a library"         , p['dist'].to_f] if p['amenity'] == 'library'
@@ -233,6 +267,7 @@ class GisConvenienceFunctions
 
   def nearby_landmarks_to_english(lat,lon,state,county,city,zip,inside,near)
     return nil unless near.length > 0 or inside.length > 0
+    return nil if lat.nil? or lon.nil?
     near_fragments = near.map{|n,d| "#{n} (%d ft)" % [(d * @@feet_per_meter)]}
     result  = "The location %6.4f°N, %6.4f°E is" % [lat,lon]
     result += " in #{join_as_english(inside)}" if inside.length > 0
