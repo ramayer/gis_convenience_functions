@@ -3,6 +3,13 @@ $: << './lib'
 
 require 'gis_convenience_functions'
 require 'yaml'
+require 'nokogiri'
+require 'nokogiri'
+require 'csv'
+require 'cgi'
+require 'erb'
+require 'yaml'
+include ERB::Util
 
 if ARGV.length != 2
   $stderr.puts %Q{usage:
@@ -20,12 +27,332 @@ gcf = GisConvenienceFunctions.new(ENV['GIS_USER'] || 'gis',
 lat = ARGV[0]
 lon = ARGV[1]
 
+# Make this a gem.
+class KML
+  def make_color_style(stylename,linecolor,polycolor,pointcolor)
+    icon = 'http://maps.google.com/mapfiles/kml/pal3/icon21.png'
+    icon = 'http://maps.google.com/mapfiles/kml/paddle/wht-blank.png'
+    icon = 'http://upload.wikimedia.org/wikipedia/commons/thumb/7/71/Steel_pog.svg/200px-Steel_pog.svg.png'
+    linecolor = linecolor.split(/(..)/).reverse.join('')
+    polycolor = polycolor.split(/(..)/).reverse.join('')
+    pointcolor = pointcolor.split(/(..)/).reverse.join('')
+    %Q{
+    <Style id="#{stylename}_norm">
+      <ListStyle>
+          <bgColor>cf#{pointcolor}</bgColor>
+      </ListStyle>
+      <LineStyle>
+        <color>cf#{linecolor}</color>
+        <width>4</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>4f#{polycolor}</color>
+      </PolyStyle>
+      <IconStyle>
+             <color>ff#{pointcolor}</color>
+             <scale>0.7</scale>
+             <Icon>
+                <href>#{icon}</href>
+             </Icon>
+      </IconStyle>
+      <LabelStyle>
+         <scale>0.15</scale>
+      </LabelStyle>
+    </Style>
+    <Style id="#{stylename}_high">
+      <ListStyle>
+          <bgColor>ff#{pointcolor}</bgColor>
+      </ListStyle>
+      <LineStyle>
+        <color>cf#{linecolor}</color>
+        <width>8</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>7f#{polycolor}</color>
+      </PolyStyle>
+      <IconStyle>
+             <color>ff#{pointcolor}</color>
+                         <Icon>
+                <href>#{icon}</href>
+             </Icon>
+      </IconStyle>
+      <LabelStyle>
+         <scale>1</scale>
+      </LabelStyle>
+    </Style>
+    <StyleMap id="#{stylename}">
+        <Pair>
+          <key>normal</key>
+          <styleUrl>##{stylename}_norm</styleUrl>
+        </Pair>
+        <Pair>
+          <key>highlight</key>
+          <styleUrl>##{stylename}_high</styleUrl>
+        </Pair>
+    </StyleMap>
+    }
+  end
+
+  def make_style(icon)
+    clean_icon = icon
+    # to color the icon put <color>ffff0000</color> in the <IconStyle> section.
+    %Q{
+	<Style id="#{clean_icon}_plain">
+		<IconStyle><Icon><href>http://map4.forensiclogic.com/img/compstat/#{icon}</href></Icon></IconStyle>
+		<LabelStyle><scale>0.25</scale></LabelStyle>
+		<ListStyle><bgColor>ff00ff00</bgColor></ListStyle>
+	</Style>
+	<Style id="#{icon}_highlighted">
+		<IconStyle><Icon><href>http://map4.forensiclogic.com/img/compstat/#{icon}</href></Icon></IconStyle>
+		<LabelStyle><scale>0.75</scale></LabelStyle>
+		<ListStyle><bgColor>ff00ff00</bgColor></ListStyle>
+	</Style>
+	<StyleMap id="#{clean_icon}">
+		<Pair><key>normal</key><styleUrl>##{clean_icon}_plain</styleUrl></Pair>
+		<Pair><key>highlight</key><styleUrl>##{clean_icon}_highlighted</styleUrl></Pair>
+	</StyleMap>
+	}
+  end
+
+#  def make_poly_from_points(name,points,style='m_ylw-pushpin',opts={})
+#    # <extrude>1</extrude>
+#    # <altitudeMode>relativeToGround</altitudeMode>
+#    %Q{
+#			<Placemark>
+#				<name>#{name}</name>
+#				<styleUrl>##{style}</styleUrl>
+#                                #{opts[:extra_xml]}
+#   <Polygon>
+#      <outerBoundaryIs>
+#        <LinearRing>
+#          <coordinates>
+#            #{points.map{|p| "#{p.y},#{p.x},100"}.join("\n\t")}
+#          </coordinates>
+#        </LinearRing>
+#      </outerBoundaryIs>
+#    </Polygon>
+#			</Placemark>
+#     }
+#
+#  end
+#
+#  def make_polys(csvfile,styleurl='#m_ylw-pushpin')
+#    rows = CSV::read(csvfile)
+#    cols = rows.shift
+#    rows.map{|name,geom|
+#      styleurl = '#yellow_area' if name =~/100 meter/
+#      %Q{
+#			<Placemark>
+#				<name>#{name}</name>
+#				<styleUrl>#{styleurl}</styleUrl>
+#				<ExtendedData>
+#					<SchemaData schemaUrl="#Mayor_100Blocks">
+#						<SimpleData name="Name">#{name}</SimpleData>
+#					</SchemaData>
+#				</ExtendedData>
+#                                #{geom}
+#			</Placemark>
+#     }
+#    }.join("\n")
+#  end
+
+  def blank_template
+    %Q{<?xml version="1.0" encoding="UTF-8"?>
+     <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+   <Document>
+     <open>1</open>
+
+	<StyleMap id="randcolor">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#randcolor0</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#randcolor1</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Style id="randcolor0">
+		<PolyStyle>
+			<color>8052ff89</color>
+			<colorMode>random</colorMode>
+			<outline>1</outline>
+		</PolyStyle>
+	</Style>
+	<Style id="randcolor1">
+		<LineStyle>
+			<color>ff000000</color>
+			<colorMode>random</colorMode>
+			<width>3</width>
+		</LineStyle>
+		<PolyStyle>
+			<color>ff000080</color>
+			<outline>1</outline>
+		</PolyStyle>
+	</Style>
+
+     <Folder id="/">
+	<name>Consolidated KML</name>
+	<open>1</open>
+      </Folder>
+   </Document>
+   </kml>
+  }
+  end
+
+
+#  def make_line(label,desc,style,coords)
+#    %Q{
+#    <Placemark>
+#      <name>#{label}</name>
+#      <description>#{desc}</description>
+#      <styleUrl>##{style}</styleUrl>
+#      <LineString>
+#        <extrude>1</extrude>
+#        <tessellate>1</tessellate>
+#        <coordinates> 
+#            #{coords.map{|lat,lon| "#{lon},#{lat},200"}.join("\n\t")}
+#        </coordinates>
+#      </LineString>
+#    </Placemark>
+#    }
+#    # <altitudeMode>absolute</altitudeMode>
+#  end
+
+  def add_style(icon)
+    return if @nt.search("//xmlns:StyleMap[@id='#{icon}']").first
+    @nt.search("//xmlns:Folder[@id='/']").first.add_child(make_style(icon))
+  end
+
+  def add_color_style(name,linecolor,polycolor,pointcolor)
+    return if @nt.search("//xmlns:StyleMap[@id='#{name}']").first
+    @nt.search("//xmlns:Folder[@id='/']").first.add_child(make_color_style(name,linecolor,polycolor,pointcolor))
+  end
+
+
+  def initialize(name)
+    @nt = Nokogiri.parse(blank_template)
+    @nt.search("//xmlns:name").first.content = name
+  end
+
+  def nt
+    @nt
+  end
+
+  def add_folder(dirty_path,opts={})
+    path = dirty_path.select{|x| x}.map{|x| x.gsub(/\W/,"_")}
+    child = nil
+    psf = []
+    # $stderr.puts path.inspect
+    stylexml=opts[:style] ? "<styleUrl>##{opts[:style]}</styleUrl>" : ''
+    path.each{|pe|
+      parent_id = '/' + psf.join('/')
+      parent = @nt.search("//xmlns:Folder[@id='#{parent_id}']").first
+      psf += [pe]
+      child_id = '/' + psf.join('/')
+      child = @nt.search("//xmlns:Folder[@id='#{child_id}']").first
+      unless child
+        parent.add_child(%Q{<Folder id="#{child_id}"><name>#{pe}</name>#{stylexml}</Folder>\n})
+      end
+    }
+    folder_id =  '/' + path.join('/')
+    @nt.search("//xmlns:Folder[@id='#{folder_id}']").first
+  end
+
+  def make_point(name,incidentnumber,description,lat,lon,icon)
+  %Q{
+	<Placemark>
+	<name>#{html_escape(name)}</name>
+	<visibility>0</visibility>
+	<description><![CDATA[<div>
+	    <b>
+	    <a href="http://go.leapportal.us/quicksearch/search?q=#{incidentnumber}">#{name}</a>
+            <b><pre>#{description}</pre>
+            </div>
+         ]]></description>
+	<LookAt>
+		<longitude>#{lon}</longitude>
+		<latitude>#{lat}</latitude>
+		<altitude>0</altitude>
+		<heading>10</heading>
+		<tilt>40.5575073395506</tilt>
+		<range>500.6566641072245</range>
+	</LookAt>
+	<styleUrl>##{icon}</styleUrl>
+	<Point>
+		<extrude>1</extrude>
+		<altitudeMode>relativeToGround</altitudeMode>
+		<coordinates>#{lon},#{lat},14.71240043169608</coordinates>
+	</Point>
+	</Placemark>
+   }
+  end
+
+  def make_polygon(name,label,geom,style)
+  
+  %Q{
+	<Placemark>
+	<name>#{html_escape(name)}</name>
+	<visibility>1</visibility>
+	<description><![CDATA[<div>#{label}</div>]]></description>
+	<styleUrl>##{style}</styleUrl>
+	#{geom}
+	</Placemark>
+   }
+  end
+
+end
+
+
+kml = KML.new('Cities, Towns, Etc')
+root = kml.nt.search("//xmlns:Folder[@id='/']").first
+kml.add_color_style('citystyle','800000','800000','800000')
+kml.add_color_style('otherstyle','800000','800000','800000')
+root.add_child(%Q{
+					<LookAt>
+						<TimeSpan>
+							<begin>2011-01-01T20:21:00Z</begin>
+							<end>2011-12-31T14:24:00Z</end>
+						</TimeSpan>
+						<longitude>-122.2632036222537</longitude>
+						<latitude>37.81073795810176</latitude>
+						<altitude>0</altitude>
+						<heading>5</heading>
+						<tilt>40.5575073395506</tilt>
+						<range>20863.79984922076</range>
+					</LookAt>
+})
+
+
+puts '====================================================='
+# puts(gcf.polygons_to_kml.first)
+kml_polys = gcf.polygons_to_kml
+$stderr.puts "#{kml_polys.length} polys"
+kml_polys.each{|p|
+   polytype = p['place']
+   polyname = p['name']
+   polykml  = p['askml']
+   admin_level = p['admin_level']
+   more = p.select{|x,y| y && (!(x=='way')) && (!(x=='geom')) && (!(x=='askml'))}.to_yaml
+   node = kml.add_folder([polyname])
+   style = (polyname =~ /City/) ? 'citystyle' : 'otherstyle'
+   node.add_child( kml.make_polygon(polyname,more,polykml,style))
+}
+
+File.open("/tmp/2.kml","w"){|f| f.puts kml.nt.to_xml}
+exit
+
+
+puts '====================================================='
+puts(gcf.nearby_polygons(lat,lon).to_yaml)
+
+
+begin
 puts "========= nearby landmarks =============="
-
 nearby_landmarks = gcf.nearby_landmarks(lat,lon)
-
 puts nearby_landmarks.to_yaml
-
+rescue
+end
 
 puts "========= census edges =============="
 puts gcf.closest_census_edges(lat,lon).inspect
@@ -41,9 +368,6 @@ puts gcf.get_blockgroups(lat,lon).inspect
 
 exit
 
-
-puts '====================================================='
-puts(gcf.nearby_polygons(lat,lon).to_yaml)
 
 puts '====================================================='
 puts(gcf.nearby_lines(lat,lon).map{|x| x['name']}.uniq.to_yaml)
