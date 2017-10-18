@@ -340,40 +340,31 @@ kml_polys.each{|p|
 }
 
 File.open("/tmp/2.kml","w"){|f| f.puts kml.nt.to_xml}
-exit
-
 
 puts '====================================================='
 puts(gcf.nearby_polygons(lat,lon).to_yaml)
 
-
-begin
 puts "========= nearby landmarks =============="
 nearby_landmarks = gcf.nearby_landmarks(lat,lon)
 puts nearby_landmarks.to_yaml
-rescue
-end
 
-puts "========= census edges =============="
-puts gcf.closest_census_edges(lat,lon).inspect
+# puts "========= census edges =============="
+# puts gcf.closest_census_edges(lat,lon).inspect
 
 
-puts "========= guess city =============="
-puts gcf.guess_city_from_census_data(lat,lon).inspect
+# puts "========= guess city =============="
+# puts gcf.guess_city_from_census_data(lat,lon).inspect
 
-puts "========= get blockgroup =============="
-puts gcf.get_blockgroups(lat,lon).inspect
+# puts "========= get blockgroup =============="
+# puts gcf.get_blockgroups(lat,lon).inspect
 
+# exit
 
+# puts '====================================================='
+# puts(gcf.nearby_lines(lat,lon).map{|x| x['name']}.uniq.to_yaml)
 
-exit
-
-
-puts '====================================================='
-puts(gcf.nearby_lines(lat,lon).map{|x| x['name']}.uniq.to_yaml)
-
-puts '====================================================='
-puts(gcf.nearby_points(lat,lon).to_yaml)
+# puts '====================================================='
+# puts(gcf.nearby_points(lat,lon).to_yaml)
 
 puts '====================================================='
 puts(gcf.cheap_reverse_geocode(lat,lon))

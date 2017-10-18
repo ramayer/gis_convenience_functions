@@ -23,10 +23,10 @@ class GisConvenienceFunctions
     sql = %Q{
       select * from (
         SELECT name,highway,waterway,route,
-               ST_Distance(r.way,ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),900913)) as dist
+               ST_Distance(r.way,ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),3857)) as dist
                FROM planet_osm_line r
-               WHERE way && ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),900913),#{@one_quarter_mile})
-               ORDER BY way<->ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),900913) limit 100
+               WHERE way && ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),3857),#{@one_quarter_mile})
+               ORDER BY way<->ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),3857) limit 100
        ) as a
       where
          (name is not null) and
@@ -45,11 +45,11 @@ class GisConvenienceFunctions
     sql = %Q{
       select * from (
         SELECT fullname,state,zipl,zipr,
-               ST_Distance(ST_Transform(geom,900913),ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),900913)) as dist
+               ST_Distance(ST_Transform(geom,3857),ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),3857)) as dist
                FROM census_tl_2012_edges
                JOIN census_ansi_state on (statefp = state_ansi)
                WHERE fullname is not null or zipl is not null or zipr is not null
-               AND geom && ST_Transform(ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),900913),#{interesting_distance}),4269)
+               AND geom && ST_Transform(ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),3857),#{interesting_distance}),4269)
                ORDER BY geom<->ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),4269) limit 100
        ) as a
       where
@@ -78,20 +78,20 @@ class GisConvenienceFunctions
 
   def polygons_to_kml()
     sql = %Q{
-        SELECT askml(way),*
+        SELECT st_askml(way),*
           FROM planet_osm_polygon
           WHERE name is not null
-          AND way && (select buffer(way,1000) from planet_osm_polygon where name = 'Alameda County')
+          AND way && (select st_buffer(way,1000) from planet_osm_polygon where name = 'Alameda County')
           AND admin_level is not null
          LIMIT 1000
     }
 
-    sql = %Q{
-       SELECT namelsad10 as name, askml(geom), geom as way, *
+    sql_census = %Q{
+       SELECT namelsad10 as name, st_askml(geom), geom as way, *
          FROM census_tl_2010_place
          JOIN census_ansi_state on (statefp10 = state_ansi)
         WHERE statefp10 = '06'
-          AND geom && (select st_transform(buffer(way,100000),4269) from planet_osm_polygon where name = 'Alameda County')
+          AND geom && (select st_transform(st_buffer(way,100000),4269) from planet_osm_polygon where name = 'Alameda County')
         LIMIT 1000
     }
 
@@ -105,11 +105,11 @@ class GisConvenienceFunctions
     sql = %Q{
         SELECT osm_id, name, amenity, admin_level, boundary, sport, leisure, building, operator,
                array_to_json(hstore_to_array(tags)) as json_tags,
-               ST_Intersects(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),900913),way) as intersects,
-               ST_Distance(way,ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),900913)) as dist
+               ST_Intersects(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),3857),way) as intersects,
+               ST_Distance(way,ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),3857)) as dist
           FROM planet_osm_polygon geom
-         WHERE way && ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),900913),#{interesting_distance})
-           AND ST_Intersects(ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),900913),#{interesting_distance}),way)
+         WHERE way && ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),3857),#{interesting_distance})
+           AND ST_Intersects(ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),3857),#{interesting_distance}),way)
            AND name IS NOT NULL
            AND name != 'United States of America'
       ORDER BY dist,way_area
@@ -125,11 +125,11 @@ class GisConvenienceFunctions
     sql = %Q{
         SELECT *,
                array_to_json(hstore_to_array(tags)) as json_tags,
-               ST_Intersects(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),900913),way) as intersects,
-               ST_Distance(way,ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),900913)) as dist
+               ST_Intersects(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),3857),way) as intersects,
+               ST_Distance(way,ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),3857)) as dist
           FROM planet_osm_point geom
-         WHERE way && ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),900913),#{interesting_distance})
-           AND ST_Intersects(ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),900913),#{interesting_distance}),way)
+         WHERE way && ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),3857),#{interesting_distance})
+           AND ST_Intersects(ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),3857),#{interesting_distance}),way)
            AND name IS NOT NULL
       ORDER BY dist
          LIMIT 100
@@ -159,11 +159,11 @@ class GisConvenienceFunctions
     sql = %Q{
         SELECT *,
                array_to_json(hstore_to_array(tags)) as json_tags,
-               ST_Intersects(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),900913),way) as intersects,
-               ST_Distance(way,ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),900913)) as dist
+               ST_Intersects(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),3857),way) as intersects,
+               ST_Distance(way,ST_Transform(ST_SetSRID(ST_MakePoint($2, $1),4326),3857)) as dist
           FROM planet_osm_line geom
-         WHERE way && ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),900913),#{interesting_distance})
-           AND ST_Intersects(ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),900913),#{interesting_distance}),way)
+         WHERE way && ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),3857),#{interesting_distance})
+           AND ST_Intersects(ST_Buffer(ST_Transform(ST_SetSRID(ST_MakePoint($2,$1),4326),3857),#{interesting_distance}),way)
            AND name IS NOT NULL
       ORDER BY dist
          LIMIT 100
@@ -188,14 +188,14 @@ class GisConvenienceFunctions
     near   = []
     city = county = state = zip = nil
 
-    city,state_name,state_abbr = guess_city_from_census_data(lat,lon)
-    state = state_name || state_abbr
+    # city,state_name,state_abbr = guess_city_from_census_data(lat,lon)
+    # state = state_name || state_abbr
 
     if (zn = zillow_neighborhood(lat,lon))
       inside << "#{zn['name']} Neighborhood"
     end
 
-    inside << city
+    inside << city if city
 
     np = nearby_polygons(lat,lon)
     np.each{|p|
@@ -209,8 +209,8 @@ class GisConvenienceFunctions
       end
     }
 
-    ne = closest_census_edges(lat,lon)
-
+    # ne = closest_census_edges(lat,lon)
+    #
     ### These edges are mostly redundant with OSM
     ### OSM is more complete (international), but
     ### Census has nicer looking names (Rd instead of Road, etc)
@@ -218,13 +218,13 @@ class GisConvenienceFunctions
     # ne.each{|p|
     #   near << [p['fullname'],p['dist'].to_f] if p['fullname']
     # }
-
-    nez = ne.select{|x| x['zipl'] || x['zipr']}.first 
-    if nez
-      inside << nez['zipl'] if nez['zipl'] 
-      inside << nez['zipr'] if nez['zipr'] 
-      zip = nez['zipl'] || nez['zipr']
-    end
+    #
+    # nez = ne.select{|x| x['zipl'] || x['zipr']}.first 
+    # if nez
+    #    inside << nez['zipl'] if nez['zipl'] 
+    #    inside << nez['zipr'] if nez['zipr'] 
+    #    zip = nez['zipl'] || nez['zipr']
+    # end
 
     nl = nearby_osm_lines(lat,lon)
     nl.each{|p|
